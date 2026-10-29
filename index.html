@@ -56,8 +56,8 @@ footer{max-width:1180px;margin:0 auto;padding:0 16px 24px;color:var(--muted);fon
 </select>
 <p class="hint">透過(背景なし)で保存すると背景が透明な動画(WebM)を生成します。GB・RB・BBを選ぶと単色背景動画になります。</p>
 </div>
-<div class="actions"><button id="previewBtn">▶ プレビュー再生</button><button class="secondary" id="stopBtn">■ 停止</button><button class="green" id="exportBtn">動画を書き出す（高速処理）</button></div>
-<div id="status" class="status">素材を読み込んでください。目閉じ画像を読み込むと、非発話時に確率1/5（クールタイム3秒）で瞬きを行います。</div>
+<div class="actions"><button id="previewBtn">▶ プレビュー再生</button><button class="secondary" id="stopBtn">■ 停止</button><button class="green" id="exportBtn">動画を書き出す</button></div>
+<div id="status" class="status">素材を読み込んでください。書き出しは音声の再生とともにリアルタイムで行われます。</div>
 </section>
 <section class="panel">
 <h2>ライブプレビュー <span class="pill" id="pillLabel">背景透過キャンバス</span></h2>
@@ -71,7 +71,7 @@ footer{max-width:1180px;margin:0 auto;padding:0 16px 24px;color:var(--muted);fon
 const $=id=>document.getElementById(id);
 const canvas=$('canvas'),ctx=canvas.getContext('2d');
 const imgs={closed:null,open:null,half:null,eyesClosed:null}; 
-let audioUrl=null, raf=0, playing=false, exporting=false, audioBuffer=null;
+let audioUrl=null, raf=0, playing=false, exporting=false, audioCtx=null;
 let blinkTimes = [];
 
 function say(t){$('status').textContent=t}
@@ -89,38 +89,32 @@ loadImg('open','open');
 loadImg('half','half');
 loadImg('eyesClosed','eyesClosed');
 
-// 3秒ごとのクールタイム判定で、1/5 (20%) の確率で瞬きをスケジュール生成
 function generateBlinkSchedule(){
  if(!imgs.eyesClosed) return;
- const dur = audioBuffer ? audioBuffer.duration : 60;
+ const dur = $('audio').duration || 60;
  blinkTimes = [];
  let t = 3.0;
  while(t < dur + 5) {
-  // 1/5 (20%) の確率判定
   if(Math.random() < 0.2) {
    blinkTimes.push(t);
   }
-  t += 3.0; // クールタイム3秒
+  t += 3.0;
  }
 }
 
-$('audioFile').addEventListener('change',async e=>{
+$('audioFile').addEventListener('change', e=>{
  const f=e.target.files[0];if(!f)return;
  if(audioUrl)URL.revokeObjectURL(audioUrl);
- audioUrl=URL.createObjectURL(f);$('audio').src=audioUrl;$('audio').style.display='block';$('audio').load();
- say(`音声を読み込み・解析中: ${f.name}`);
- try{
-  const arrayBuffer = await f.arrayBuffer();
-  const ac = new (window.AudioContext||window.webkitAudioContext)();
-  audioBuffer = await ac.decodeAudioData(arrayBuffer);
-  await analyseAudioBuffer(audioBuffer);
-  await ac.close();
-  generateBlinkSchedule();
-  say(`音声を読み込み完了: ${f.name}`);
- }catch(err){
-  say('音声ファイルの解析に失敗しました');
- }
+ audioUrl=URL.createObjectURL(f);
+ $('audio').src=audioUrl;
+ $('audio').style.display='block';
+ $('audio').load();
+ say(`音声を読み込みました: ${f.name}`);
 });
+
+$('audio').onloadedmetadata = () => {
+ generateBlinkSchedule();
+};
 
 function setCanvasSize(){let w=+$('width').value,ratio=$('ratio').value,h=ratio==='16:9'?Math.round(w*9/16):ratio==='9:16'?Math.round(w*16/9):w;if(ratio==='9:16'&&w===1920)w=1080;canvas.width=w;canvas.height=h;drawAt(0)}
 $('width').addEventListener('change',setCanvasSize);$('ratio').addEventListener('change',setCanvasSize);
@@ -141,139 +135,177 @@ $('bgMode').addEventListener('change',()=>{updateBgModeStyle();drawAt($('audio')
 updateBgModeStyle();
 
 function isSpeakingAt(t){
- const dur=audioBuffer?audioBuffer.duration:($('audio').duration||0);
- const data=window.audioEnergy||[];
- if(!dur||!data.length) return false;
- const idx=Math.min(data.length-1,Math.floor(t/dur*data.length));
+ const a = $('audio');
+ const dur = a.duration || 0;
+ const data = window.audioEnergy || [];
+ if(!dur || !data.length) return false;
+ const idx = Math.min(data.length - 1, Math.floor(t / dur * data.length));
  return data[idx] > .018;
 }
 
 function isBlinkingAt(t){
  if(!imgs.eyesClosed) return false;
- const blinkDuration = 0.15; // 瞬きの持続時間（約0.15秒）
+ const blinkDuration = 0.15;
  return blinkTimes.some(bt => t >= bt && t < bt + blinkDuration);
 }
 
 function imageFor(t){
- const dur=audioBuffer?audioBuffer.duration:($('audio').duration||0);
- const halfT=Math.max(0,+$('halfTime').value||.1);
+ const a = $('audio');
+ const halfT = Math.max(0, +$('halfTime').value || .1);
+ if(!playing || a.paused) return imgs.closed || imgs.open;
+ 
  const speaking = isSpeakingAt(t);
 
- // 話していない間のみ瞬きを実行
  if(!speaking && isBlinkingAt(t)){
   return imgs.eyesClosed;
  }
 
- if(!imgs.open)return imgs.closed;
- if(!imgs.closed)return imgs.open;
- const data=window.audioEnergy||[];
- if(!dur||!data.length)return imgs.closed;
+ if(!imgs.open) return imgs.closed;
+ if(!imgs.closed) return imgs.open;
+ const data = window.audioEnergy || [];
+ const dur = a.duration || 0;
+ if(!dur || !data.length) return imgs.closed;
  
- const idx=Math.min(data.length-1,Math.floor(t/dur*data.length));
+ const idx = Math.min(data.length - 1, Math.floor(t / dur * data.length));
  if(speaking){
-  let onset=idx;while(onset>0&&data[onset-1]>.018)onset--;
-  const onsetTime=onset/data.length*dur;
-  if(imgs.half&&t-onsetTime<halfT)return imgs.half;
+  let onset = idx; while(onset > 0 && data[onset-1] > .018) onset--;
+  const onsetTime = onset / data.length * dur;
+  if(imgs.half && t - onsetTime < halfT) return imgs.half;
   return imgs.open;
  }
  return imgs.closed;
 }
 
-function drawOnContext(targetCtx, w, h, t){
-  targetCtx.clearRect(0,0,w,h);
-  const bg=$('bgMode')?.value||'transparent';
-  if(bg==='green'){targetCtx.fillStyle='#00FF00';targetCtx.fillRect(0,0,w,h);}
-  else if(bg==='red'){targetCtx.fillStyle='#FF0000';targetCtx.fillRect(0,0,w,h);}
-  else if(bg==='blue'){targetCtx.fillStyle='#0000FF';targetCtx.fillRect(0,0,w,h);}
-  
-  const im=imageFor(t);
-  if(!im){
-   targetCtx.fillStyle='#9ba4c4';targetCtx.textAlign='center';targetCtx.font='22px system-ui';
-   targetCtx.fillText('立ち絵を読み込むとここに表示されます',w/2,h/2);
-   return null;
-  }
-  const scale=Math.min(w/im.width,h/im.height);
-  const dw=im.width*scale,dh=im.height*scale;
-  targetCtx.drawImage(im,(w-dw)/2,(h-dh)/2,dw,dh);
-  return im;
-}
-
 function drawAt(t){
- const im = drawOnContext(ctx, canvas.width, canvas.height, t);
- const stateText = im===imgs.eyesClosed?'瞬き':im===imgs.open?'口開き':im===imgs.half?'半開き':'口閉じ';
- $('details').textContent=`${playing?'再生中':'待機中'} · ${t.toFixed(2)} 秒 · ${stateText}`;
-}
-
-async function analyseAudioBuffer(buf){
- const ch=buf.getChannelData(0),step=Math.max(1,Math.floor(buf.sampleRate*.025));
- const arr=[];
- for(let i=0;i<ch.length;i+=step){
-  let sum=0,n=Math.min(step,ch.length-i);
-  for(let j=0;j<n;j++)sum+=ch[i+j]*ch[i+j];
-  arr.push(Math.sqrt(sum/n));
+ ctx.clearRect(0, 0, canvas.width, canvas.height);
+ const bg = $('bgMode')?.value || 'transparent';
+ if(bg === 'green'){ ctx.fillStyle = '#00FF00'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+ else if(bg === 'red'){ ctx.fillStyle = '#FF0000'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+ else if(bg === 'blue'){ ctx.fillStyle = '#0000FF'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+ 
+ const im = imageFor(t);
+ if(!im){
+  ctx.fillStyle = '#9ba4c4'; ctx.textAlign = 'center'; ctx.font = '22px system-ui';
+  ctx.fillText('立ち絵を読み込むとここに表示されます', canvas.width/2, canvas.height/2);
+  return;
  }
- const max=Math.max(...arr,0.0001);
- window.audioEnergy=arr.map(v=>v/max);
+ const scale = Math.min(canvas.width / im.width, canvas.height / im.height);
+ const w = im.width * scale, h = im.height * scale;
+ ctx.drawImage(im, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
+
+ const stateText = im===imgs.eyesClosed?'瞬き':im===imgs.open?'口開き':im===imgs.half?'半開き':'口閉じ';
+ $('details').textContent = `${playing?'再生中':'待機中'} · ${t.toFixed(2)} 秒 · ${stateText}`;
 }
 
-function loop(){if(!playing)return;const t=$('audio').currentTime;drawAt(t);raf=requestAnimationFrame(loop)}
-$('previewBtn').onclick=async()=>{
- if(!imgs.closed&&!imgs.open){say('先に立ち絵を読み込んでください');return}
- if(!audioBuffer){say('先に音声ファイルを読み込んでください');return}
+async function analyseAudio(){
+ const file = $('audioFile').files[0];
+ if(!file) return;
+ const ac = new (window.AudioContext || window.webkitAudioContext)();
+ const buf = await ac.decodeAudioData(await file.arrayBuffer());
+ const ch = buf.getChannelData(0), step = Math.max(1, Math.floor(buf.sampleRate * .025));
+ const arr = [];
+ for(let i = 0; i < ch.length; i += step){
+  let sum = 0, n = Math.min(step, ch.length - i);
+  for(let j = 0; j < n; j++) sum += ch[i+j] * ch[i+j];
+  arr.push(Math.sqrt(sum / n));
+ }
+ const max = Math.max(...arr, 0.0001);
+ window.audioEnergy = arr.map(v => v / max);
+ await ac.close();
+}
+
+function loop(){
+ if(!playing) return;
+ const t = $('audio').currentTime;
+ drawAt(t);
+ raf = requestAnimationFrame(loop);
+}
+
+$('previewBtn').onclick = async () => {
+ if(!imgs.closed && !imgs.open){ say('先に立ち絵を読み込んでください'); return; }
+ if(!$('audio').src){ say('先に音声ファイルを読み込んでください'); return; }
  try{
+  await analyseAudio();
   generateBlinkSchedule();
-  playing=true;$('audio').currentTime=0;await $('audio').play();
-  cancelAnimationFrame(raf);loop();
-  $('audio').onended=()=>{playing=false;drawAt(0);cancelAnimationFrame(raf)}
- }catch(e){say('再生できませんでした: '+e.message)}
+  playing = true;
+  $('audio').currentTime = 0;
+  await $('audio').play();
+  cancelAnimationFrame(raf);
+  loop();
+  $('audio').onended = () => {
+   playing = false;
+   drawAt(0);
+   cancelAnimationFrame(raf);
+  };
+ }catch(e){
+  say('再生できませんでした: ' + e.message);
+ }
 };
-$('stopBtn').onclick=()=>{playing=false;$('audio').pause();cancelAnimationFrame(raf);drawAt(0);say('停止しました')};
+
+$('stopBtn').onclick = () => {
+ playing = false;
+ $('audio').pause();
+ cancelAnimationFrame(raf);
+ drawAt(0);
+ say('停止しました');
+};
 
 function chooseMime(){
-  const transparent=$('bgMode').value==='transparent';
-  const opts=transparent
+  const transparent = $('bgMode').value === 'transparent';
+  const opts = transparent
     ? ['video/webm;codecs=vp9','video/webm;codecs=vp9,opus','video/webm']
     : ['video/mp4;codecs=h264,aac','video/mp4','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
-  return opts.find(x=>window.MediaRecorder&&MediaRecorder.isTypeSupported(x))||'';
+  return opts.find(x => window.MediaRecorder && MediaRecorder.isTypeSupported(x)) || '';
 }
 
-$('exportBtn').onclick=async()=>{
- if(exporting)return;
- if(!imgs.closed&&!imgs.open){say('先に立ち絵を読み込んでください');return}
- if(!audioBuffer){say('先に音声ファイルを読み込んでください');return}
- if(!window.MediaRecorder||!canvas.captureStream){say('このブラウザは動画書き出しに対応していません');return}
- 
- exporting=true;$('exportBtn').disabled=true;
- say('高速レンダリング中… しばらくお待ちください。');
+$('exportBtn').onclick = async () => {
+ if(exporting) return;
+ if(!imgs.closed && !imgs.open){ say('先に立ち絵を読み込んでください'); return; }
+ if(!$('audio').src){ say('先に音声ファイルを読み込んでください'); return; }
+ if(!window.MediaRecorder || !canvas.captureStream){ say('このブラウザは動画書き出しに対応していません'); return; }
 
- try {
+ exporting = true;
+ $('exportBtn').disabled = true;
+
+ try{
+  await analyseAudio();
   generateBlinkSchedule();
+  const a = $('audio');
+  a.pause();
+  a.currentTime = 0;
+  playing = true;
+  drawAt(0);
+
   const fps = +$('fps').value;
-  const duration = audioBuffer.duration;
-  const totalFrames = Math.ceil(duration * fps);
-  
-  const offCanvas = document.createElement('canvas');
-  offCanvas.width = canvas.width;
-  offCanvas.height = canvas.height;
-  const offCtx = offCanvas.getContext('2d');
+  const stream = canvas.captureStream(fps);
+  let audioStream = null;
 
-  const stream = offCanvas.captureStream(fps);
+  try{
+   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+   const source = audioCtx.createMediaElementSource(a);
+   const dest = audioCtx.createMediaStreamDestination();
+   source.connect(dest);
+   source.connect(audioCtx.destination);
+   audioStream = dest.stream;
+   audioStream.getAudioTracks().forEach(tr => stream.addTrack(tr));
+  }catch(e){
+   console.warn('audio mix error', e);
+  }
+
   const mime = chooseMime();
-
   const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
   const chunks = [];
 
-  rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+  rec.ondataavailable = e => { if(e.data && e.data.size) chunks.push(e.data); };
+  rec.onerror = e => say('書き出しエラー: ' + (e.error?.message || '不明なエラー'));
 
-  rec.onstop = async () => {
+  rec.onstop = () => {
+   playing = false;
+   cancelAnimationFrame(raf);
    const type = rec.mimeType || 'video/webm';
    const ext = type.includes('mp4') ? 'mp4' : 'webm';
-   const videoBlob = new Blob(chunks, { type });
-
-   drawAt(0);
-   say(`書き出し完了！ 高速処理が終了しました (${ext.toUpperCase()})\n保存を開始します。`);
-   
-   const url = URL.createObjectURL(videoBlob);
+   const blob = new Blob(chunks, { type });
+   const url = URL.createObjectURL(blob);
    const link = document.createElement('a');
    link.href = url;
    link.download = 'clipforge-lipsync.' + ext;
@@ -281,40 +313,31 @@ $('exportBtn').onclick=async()=>{
    link.click();
    link.remove();
    setTimeout(() => URL.revokeObjectURL(url), 60000);
-
+   stream.getTracks().forEach(t => t.stop());
+   if(audioCtx) audioCtx.close().catch(() => {});
+   drawAt(0);
+   say(`書き出し完了！ ${ext.toUpperCase()} / ${(blob.size/1024/1024).toFixed(1)} MB`);
    exporting = false;
    $('exportBtn').disabled = false;
   };
 
-  rec.start();
+  a.onended = () => {
+   if(rec.state !== 'inactive') rec.stop();
+  };
 
-  let currentFrame = 0;
+  rec.start(250);
+  await a.play();
+  loop();
+  say('書き出し中… 音声の再生が終わるまでこのタブを開いたままにしてください。');
 
-  function renderBatch() {
-   const startTime = performance.now();
-   while (currentFrame < totalFrames && (performance.now() - startTime) < 16) {
-    const t = currentFrame / fps;
-    drawOnContext(offCtx, offCanvas.width, offCanvas.height, t);
-    currentFrame++;
-   }
-
-   say(`高速書き出し中: ${Math.round((currentFrame / totalFrames) * 100)}% 完了`);
-
-   if (currentFrame < totalFrames) {
-    setTimeout(renderBatch, 1);
-   } else {
-    setTimeout(() => rec.stop(), 100);
-   }
-  }
-
-  renderBatch();
-
- } catch (e) {
+ }catch(e){
+  playing = false;
   exporting = false;
   $('exportBtn').disabled = false;
   say('書き出しに失敗しました: ' + e.message);
  }
 };
+
 drawAt(0);
 </script>
 </body>
