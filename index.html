@@ -57,7 +57,7 @@ footer{max-width:1180px;margin:0 auto;padding:0 16px 24px;color:var(--muted);fon
 <p class="hint">透過(背景なし)で保存すると背景が透明な動画(WebM)を生成します。GB・RB・BBを選ぶと単色背景動画になります。</p>
 </div>
 <div class="actions"><button id="previewBtn">▶ プレビュー再生</button><button class="secondary" id="stopBtn">■ 停止</button><button class="green" id="exportBtn">動画を書き出す</button></div>
-<div id="status" class="status">素材を読み込んでください。書き出しボタンを押すと画面で再生しながら保存します。</div>
+<div id="status" class="status">素材を読み込んでください。音声なし時はプレビューのみ永遠に動作します。</div>
 </section>
 <section class="panel">
 <h2>ライブプレビュー <span class="pill" id="pillLabel">背景透過キャンバス</span></h2>
@@ -73,6 +73,7 @@ const canvas=$('canvas'),ctx=canvas.getContext('2d');
 const imgs={closed:null,open:null,half:null,eyesClosed:null}; 
 let audioUrl=null, raf=0, playing=false, exporting=false, audioCtx=null, mediaSourceNode=null;
 let blinkTimes = [];
+let noAudioStartTime = 0;
 
 function say(t){$('status').textContent=t}
 function loadImg(input,key){$(input).addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const url=URL.createObjectURL(f),im=new Image();im.onload=()=>{
@@ -91,7 +92,7 @@ loadImg('eyesClosed','eyesClosed');
 
 function generateBlinkSchedule(){
  if(!imgs.eyesClosed) return;
- const dur = $('audio').duration || 60;
+ const dur = ($('audio').src && $('audio').duration) ? $('audio').duration : 3600; // 音声なし時は1時間分生成
  blinkTimes = [];
  let t = 3.0;
  while(t < dur + 5) {
@@ -109,7 +110,7 @@ $('audioFile').addEventListener('change', e=>{
  $('audio').src=audioUrl;
  $('audio').style.display='block';
  $('audio').load();
- mediaSourceNode = null; // 新しい音声用にリセット
+ mediaSourceNode = null;
  say(`音声を読み込みました: ${f.name}`);
 });
 
@@ -132,11 +133,22 @@ function updateBgModeStyle(){
     $('pillLabel').textContent = s.options[s.selectedIndex].text;
   }
 }
-$('bgMode').addEventListener('change',()=>{updateBgModeStyle();drawAt($('audio').currentTime||0)});
+$('bgMode').addEventListener('change',()=>{updateBgModeStyle();drawAt(getCurrentTime());});
 updateBgModeStyle();
+
+function getCurrentTime(){
+ if($('audio').src && !$('audio').paused){
+  return $('audio').currentTime;
+ }
+ if(playing && !$('audio').src){
+  return (performance.now() - noAudioStartTime) / 1000;
+ }
+ return 0;
+}
 
 function isSpeakingAt(t){
  const a = $('audio');
+ if(!a.src) return false;
  const dur = a.duration || 0;
  const data = window.audioEnergy || [];
  if(!dur || !data.length) return false;
@@ -146,15 +158,13 @@ function isSpeakingAt(t){
 
 function isBlinkingAt(t){
  if(!imgs.eyesClosed) return false;
- const blinkDuration = 0.15;
+ const blinkDuration = 0.1; // 瞬きの長さを 0.1s に変更
  return blinkTimes.some(bt => t >= bt && t < bt + blinkDuration);
 }
 
 function imageFor(t){
  const a = $('audio');
  const halfT = Math.max(0, +$('halfTime').value || .1);
- if(!playing || a.paused) return imgs.closed || imgs.open;
- 
  const speaking = isSpeakingAt(t);
 
  if(!speaking && isBlinkingAt(t)){
@@ -165,7 +175,7 @@ function imageFor(t){
  if(!imgs.closed) return imgs.open;
  const data = window.audioEnergy || [];
  const dur = a.duration || 0;
- if(!dur || !data.length) return imgs.closed;
+ if(!a.src || !dur || !data.length) return imgs.closed;
  
  const idx = Math.min(data.length - 1, Math.floor(t / dur * data.length));
  if(speaking){
@@ -217,35 +227,45 @@ async function analyseAudio(){
 
 function loop(){
  if(!playing) return;
- const t = $('audio').currentTime;
+ const t = getCurrentTime();
  drawAt(t);
  raf = requestAnimationFrame(loop);
 }
 
 $('previewBtn').onclick = async () => {
  if(!imgs.closed && !imgs.open){ say('先に立ち絵を読み込んでください'); return; }
- if(!$('audio').src){ say('先に音声ファイルを読み込んでください'); return; }
- try{
-  await analyseAudio();
-  generateBlinkSchedule();
-  playing = true;
-  $('audio').currentTime = 0;
-  await $('audio').play();
-  cancelAnimationFrame(raf);
+ 
+ generateBlinkSchedule();
+ playing = true;
+ cancelAnimationFrame(raf);
+
+ if($('audio').src){
+  try{
+   await analyseAudio();
+   $('audio').currentTime = 0;
+   await $('audio').play();
+   loop();
+   $('audio').onended = () => {
+    playing = false;
+    drawAt(0);
+    cancelAnimationFrame(raf);
+   };
+  }catch(e){
+   say('再生できませんでした: ' + e.message);
+  }
+ } else {
+  // 音声なしプレビュー：停止ボタンが押されるまでループ再生
+  noAudioStartTime = performance.now();
   loop();
-  $('audio').onended = () => {
-   playing = false;
-   drawAt(0);
-   cancelAnimationFrame(raf);
-  };
- }catch(e){
-  say('再生できませんでした: ' + e.message);
+  say('音声なしプレビュー再生中（停止ボタンで終了）');
  }
 };
 
 $('stopBtn').onclick = () => {
  playing = false;
- $('audio').pause();
+ if($('audio').src){
+  $('audio').pause();
+ }
  cancelAnimationFrame(raf);
  drawAt(0);
  say('停止しました');
@@ -262,7 +282,7 @@ function chooseMime(){
 $('exportBtn').onclick = async () => {
  if(exporting) return;
  if(!imgs.closed && !imgs.open){ say('先に立ち絵を読み込んでください'); return; }
- if(!$('audio').src){ say('先に音声ファイルを読み込んでください'); return; }
+ if(!$('audio').src){ say('書き出しにはゆっくり音声ファイルが必要です。音声読み込みを行ってください。'); return; }
  if(!window.MediaRecorder || !canvas.captureStream){ say('このブラウザは動画書き出しに対応していません'); return; }
 
  exporting = true;
@@ -281,7 +301,6 @@ $('exportBtn').onclick = async () => {
   const fps = +$('fps').value;
   const stream = canvas.captureStream(fps);
 
-  // WebAudio API 経由で MediaElementSource を正しく接続
   try{
    if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
    if(audioCtx.state === 'suspended') await audioCtx.resume();
