@@ -57,7 +57,7 @@ footer{max-width:1180px;margin:0 auto;padding:0 16px 24px;color:var(--muted);fon
 <p class="hint">透過(背景なし)で保存すると背景が透明な動画(WebM)を生成します。GB・RB・BBを選ぶと単色背景動画になります。</p>
 </div>
 <div class="actions"><button id="previewBtn">▶ プレビュー再生</button><button class="secondary" id="stopBtn">■ 停止</button><button class="green" id="exportBtn">動画を書き出す</button></div>
-<div id="status" class="status">素材を読み込んでください。音声なし時はプレビューのみ永遠に動作します。</div>
+<div id="status" class="status">素材を読み込んでください。目閉じ画像があると100msごとに高頻度判定（クールタイム3秒）で瞬きを行います。</div>
 </section>
 <section class="panel">
 <h2>ライブプレビュー <span class="pill" id="pillLabel">背景透過キャンバス</span></h2>
@@ -90,16 +90,20 @@ loadImg('open','open');
 loadImg('half','half');
 loadImg('eyesClosed','eyesClosed');
 
+// 100ms (0.1秒) ごとに1/5の確率で抽選するロジック（クールタイム3秒）
 function generateBlinkSchedule(){
  if(!imgs.eyesClosed) return;
- const dur = ($('audio').src && $('audio').duration) ? $('audio').duration : 3600; // 音声なし時は1時間分生成
+ const dur = ($('audio').src && $('audio').duration) ? $('audio').duration : 3600;
  blinkTimes = [];
- let t = 3.0;
+ let t = 3.0; // 開始3秒後から抽選可能
  while(t < dur + 5) {
+  // 100ms刻みで確率判定 (1/5 = 0.2)
   if(Math.random() < 0.2) {
    blinkTimes.push(t);
+   t += 3.0; // 当選したらクールタイム3秒挟む
+  } else {
+   t += 0.1; // はずれたら100ms進めて再抽選
   }
-  t += 3.0;
  }
 }
 
@@ -158,7 +162,7 @@ function isSpeakingAt(t){
 
 function isBlinkingAt(t){
  if(!imgs.eyesClosed) return false;
- const blinkDuration = 0.1; // 瞬きの長さを 0.1s に変更
+ const blinkDuration = 0.1; // 瞬きの長さは 0.1s
  return blinkTimes.some(bt => t >= bt && t < bt + blinkDuration);
 }
 
@@ -254,7 +258,6 @@ $('previewBtn').onclick = async () => {
    say('再生できませんでした: ' + e.message);
   }
  } else {
-  // 音声なしプレビュー：停止ボタンが押されるまでループ再生
   noAudioStartTime = performance.now();
   loop();
   say('音声なしプレビュー再生中（停止ボタンで終了）');
