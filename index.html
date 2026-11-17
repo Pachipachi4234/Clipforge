@@ -1,372 +1,433 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ClipForge | ゆっくり口パクスタジオ</title>
-<style>
-:root{color-scheme:dark;--bg:#10121b;--panel:#191d2b;--line:#30374c;--text:#f4f6ff;--muted:#aab2cb;--accent:#8b7cff;--cyan:#63d9d0}
-*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#202443 0,#10121b 55%);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Noto Sans JP",sans-serif}
-header{padding:24px max(18px,calc((100% - 1180px)/2));border-bottom:1px solid var(--line);background:#111421cc}
-.brand{font-size:24px;font-weight:850;letter-spacing:.3px}.brand span{color:var(--accent)}header p{color:var(--muted);margin:5px 0 0}
-main{max-width:1180px;margin:22px auto;padding:0 16px;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(300px,.9fr);gap:18px}
-.panel{background:linear-gradient(160deg,#1b2030,#171a27);border:1px solid var(--line);border-radius:18px;padding:18px;box-shadow:0 14px 35px #0002}.panel h2{font-size:17px;margin:0 0 14px}.section{margin-bottom:18px}.section:last-child{margin-bottom:0}
-label{display:block;font-size:13px;color:#c5cbe0;margin-bottom:6px}.filebox{display:block;border:1px dashed #525b7b;border-radius:12px;padding:12px;background:#111522;cursor:pointer}.filebox input{width:100%;font-size:13px;margin-top:5px}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-input[type=number],select{width:100%;background:#101421;color:var(--text);border:1px solid #39415a;border-radius:9px;padding:10px}
-button{border:0;border-radius:10px;padding:11px 14px;font-weight:750;cursor:pointer;background:var(--accent);color:white}button.secondary{background:#292f45;border:1px solid #424b68}button.green{background:#168b7e}button:disabled{opacity:.45;cursor:not-allowed}.actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:14px}
-.preview{min-height:360px;display:flex;align-items:center;justify-content:center;background-color:#111522;background-image:linear-gradient(45deg,#22283a 25%,transparent 25%),linear-gradient(-45deg,#22283a 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#22283a 75%),linear-gradient(-45deg,transparent 75%,#22283a 75%);background-size:22px 22px;background-position:0 0,0 11px,11px -11px,-11px 0;border-radius:14px;border:1px solid #343b53;overflow:hidden}
-canvas{display:block;max-width:100%;max-height:520px;width:auto;height:auto;object-fit:contain}
-.hint{font-size:12px;color:var(--muted);margin-top:8px}.status{padding:10px 12px;background:#111522;border:1px solid var(--line);border-radius:10px;color:var(--muted);font-size:13px;margin-top:12px;white-space:pre-wrap}
-.pill{display:inline-block;border:1px solid #414968;background:#252b40;border-radius:99px;padding:4px 9px;font-size:11px;color:#d8dcf5;margin:0 4px 8px 0}
-footer{max-width:1180px;margin:0 auto;padding:0 16px 24px;color:var(--muted);font-size:12px}
-@media(max-width:800px){main{grid-template-columns:1fr}.preview{min-height:280px}.grid2{grid-template-columns:1fr}}
-</style>
+    <meta charset="UTF-8">
+    <title>ClipCutter | 自動無音カットツール (WebCodecs爆速版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0d1117; color: #c9d1d9; font-family: sans-serif; }
+        .panel { background: #161b22; border: 1px solid #30363d; border-radius: 0.75rem; padding: 1.5rem; }
+        .input-ui { background: #010409; border: 1px solid #30363d; color: #c9d1d9; border-radius: 0.5rem; padding: 0.5rem; width: 100%; }
+        .input-ui:focus { outline: none; border-color: #58a6ff; }
+    </style>
 </head>
-<body>
-<header><div class="brand">Clip<span>Forge</span> <span style="color:#c6caff;font-size:13px;font-weight:600">BETA</span></div><p>ゆっくり口パクスタジオ — 音声と立ち絵から、口パク動画を作成</p></header>
-<main>
-<section class="panel">
-<h2>① 素材を読み込む</h2>
-<div class="grid2 section">
- <label class="filebox">通常の立ち絵（口閉じ）<input id="closed" type="file" accept="image/*"></label>
- <label class="filebox">目閉じ立ち絵（任意,口閉じのみ）<input id="eyesClosed" type="file" accept="image/*"></label>
-</div>
-<div class="grid2 section">
- <label class="filebox">口を開けた立ち絵<input id="open" type="file" accept="image/*"></label>
- <label class="filebox">半開き立ち絵（任意）<input id="half" type="file" accept="image/*"></label>
-</div>
-<div class="section"><label class="filebox">ゆっくり音声ファイル<input id="audioFile" type="file" accept="audio/*"></label><audio id="audio" controls style="width:100%;margin-top:10px;display:none"></audio></div>
-<h2>② 口パク設定</h2>
-<div class="grid2 section">
- <div><label for="halfTime">半開きの先行時間（秒）</label><input id="halfTime" type="number" min="0" max="1" step=".05" value=".1"></div>
- <div><label for="fps">出力フレームレート</label><select id="fps"><option value="30">30 FPS</option><option value="24">24 FPS</option><option value="60">60 FPS</option></select></div>
-</div>
-<div class="grid2 section">
- <div><label for="width">動画幅</label><select id="width"><option value="1920">1920（フルHD）</option><option value="1280">1280（HD）</option><option value="1080">1080（Shorts向け縦）</option></select></div>
- <div><label for="ratio">画面比率</label><select id="ratio"><option value="16:9">16:9 横動画</option><option value="9:16">9:16 Shorts</option><option value="1:1">1:1 正方形</option></select></div>
-</div>
-<div class="section">
-<label for="bgMode">③ 背景モード（クロマキー合成用）</label>
-<select id="bgMode" style="color:#000;background:#fff">
-<option value="transparent" style="color:#000;background:#fff">透過（背景なし）</option>
-<option value="green" style="color:var(--text);background:#101421">グリーンバック（GB）</option>
-<option value="red" style="color:var(--text);background:#101421">レッドバック（RB）</option>
-<option value="blue" style="color:var(--text);background:#101421">ブルーバック（BB）</option>
-</select>
-<p class="hint">透過(背景なし)で保存すると背景が透明な動画(WebM)を生成します。GB・RB・BBを選ぶと単色背景動画になります。</p>
-</div>
-<div class="actions"><button id="previewBtn">▶ プレビュー再生</button><button class="secondary" id="stopBtn">■ 停止</button><button class="green" id="exportBtn">動画を書き出す</button></div>
-<div id="status" class="status">素材を読み込んでください。</div>
-</section>
-<section class="panel">
-<h2>ライブプレビュー <span class="pill" id="pillLabel">背景透過キャンバス</span></h2>
-<div class="preview"><canvas id="canvas" width="960" height="540"></canvas></div>
-<p class="hint">透過モードでは透明情報に対応したWebM（VP9）での出力を試みます。GB・RB・BBでは選択した単色背景も動画に書き出され、クロマキー合成に使えます。</p>
-<div class="status" id="details">口パク待機中 · 口閉じ画像を表示します</div>
-</section>
-</main>
-<footer>ClipForge prototype · ファイルはこのブラウザ内で処理され、サーバーへアップロードしません。</footer>
-<script>
-const $=id=>document.getElementById(id);
-const canvas=$('canvas'),ctx=canvas.getContext('2d');
-const imgs={closed:null,open:null,half:null,eyesClosed:null}; 
-let audioUrl=null, raf=0, playing=false, exporting=false, audioCtx=null, mediaSourceNode=null;
+<body class="min-h-screen p-6 space-y-6 max-w-5xl mx-auto">
+    <header class="border-b border-[#30363d] pb-4">
+        <h1 class="text-3xl font-bold text-[#58a6ff]">ClipCutter <span class="text-sm font-normal text-gray-400">by YuJitsu · WebCodecs Turbo</span></h1>
+        <p class="text-[#8b949e] mt-2">動画の無音部分を自動検知し、WebCodecs（GPU直接エンコード）で待ち時間なく爆速MP4生成します。</p>
+    </header>
 
-let blinkTimes = [];
-let noAudioStartTime = 0;
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        <!-- 左カラム：設定パネル -->
+        <div class="space-y-6">
+            <div class="panel">
+                <h2 class="text-lg font-bold mb-4 text-[#79c0ff]">① 動画読み込み ＆ カット設定</h2>
+                
+                <input type="file" id="mediaInput" accept="video/*" class="block w-full text-sm text-[#8b949e] file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-[#238636] file:text-white hover:file:bg-[#2ea043] cursor-pointer mb-4">
+                
+                <div class="space-y-4 text-sm mt-4">
+                    <div>
+                        <label class="block mb-1">無音と判定する音量 (デシベル)</label>
+                        <div class="flex items-center gap-2">
+                            <input type="range" id="threshold" min="-60" max="-10" value="-35" class="flex-1">
+                            <span id="thresholdVal" class="w-12 text-right font-mono">-35dB</span>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">※右に行くほど（数値が大きいほど）少しの音でも無音とみなしてカットします。</p>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block mb-1">最小の無音時間 (秒)</label>
+                            <input type="number" id="minSilence" value="0.4" step="0.1" class="input-ui">
+                            <p class="text-xs text-gray-500 mt-1">この秒数以上静かならカット</p>
+                        </div>
+                        <div>
+                            <label class="block mb-1">前後の余白 (秒)</label>
+                            <input type="number" id="padding" value="0.2" step="0.1" class="input-ui">
+                            <p class="text-xs text-gray-500 mt-1">言葉の頭切れを防ぐ余裕</p>
+                        </div>
+                    </div>
+                </div>
 
-function say(t){$('status').textContent=t}
-function loadImg(input,key){$(input).addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const url=URL.createObjectURL(f),im=new Image();im.onload=()=>{
- imgs[key]=im;
- generateBlinkSchedule();
- drawAt(0);
- say(`${f.name} を読み込みました`);
-};im.onerror=()=>say('画像を読み込めませんでした');im.src=url;});}
+                <button id="analyzeBtn" class="mt-6 bg-[#238636] hover:bg-[#2ea043] text-white px-4 py-3 rounded-md font-bold w-full transition disabled:opacity-50">
+                    解析してカット位置を決定
+                </button>
+                <div id="statusMsg" class="mt-2 text-xs text-[#58a6ff] hidden"></div>
+            </div>
 
-loadImg('closed','closed');
-loadImg('open','open');
-loadImg('half','half');
-loadImg('eyesClosed','eyesClosed');
+            <div class="panel">
+                <h2 class="text-lg font-bold mb-2 text-[#79c0ff]">② カット動画の爆速書き出し</h2>
+                <p class="text-xs text-gray-400 mb-3">等倍再生を待たず、GPUハードウェアエンコードで一気にMP4を出力します。</p>
+                <div class="mb-3">
+                    <label class="block text-xs mb-1 text-gray-300">出力フレームレート (FPS)</label>
+                    <select id="exportFps" class="input-ui text-sm">
+                        <option value="30" selected>30 FPS（標準・高速）</option>
+                        <option value="24">24 FPS（さらに爆速）</option>
+                        <option value="60">60 FPS（ぬるぬる高画質）</option>
+                    </select>
+                </div>
+                <button id="exportBtn" class="bg-[#8957e5] hover:bg-[#9d6cfa] text-white px-4 py-3 rounded-md font-bold w-full transition disabled:opacity-50" disabled>
+                    ⚡ WebCodecsで爆速MP4書き出し
+                </button>
+                <div id="exportProgressWrap" class="hidden mt-3">
+                    <div class="w-full bg-[#010409] rounded-full h-2.5 border border-[#30363d] overflow-hidden">
+                        <div id="exportProgressBar" class="bg-[#8957e5] h-2.5 transition-all duration-75" style="width: 0%"></div>
+                    </div>
+                    <div id="exportProgressText" class="text-xs text-[#79c0ff] mt-1 font-mono">0%</div>
+                </div>
+            </div>
+        </div>
 
-// 1秒(1.0s)ごとに20% (1/5) の確率で抽選するロジック（クールタイム3秒）
-function generateBlinkSchedule(){
- if(!imgs.eyesClosed) return;
- const dur = ($('audio').src && $('audio').duration) ? $('audio').duration : 3600;
- blinkTimes = [];
- let t = 1.0;
- while(t < dur + 5) {
-  if(Math.random() < 0.2) { // 20%の確率で当たった場合
-   blinkTimes.push(t);
-   t += 3.0; // クールタイム3秒を加算
-  } else {
-   t += 1.0; // はずれた場合は1秒進めて次の秒で再抽選
-  }
- }
-}
+        <!-- 右カラム：プレビューと結果 -->
+        <div class="space-y-6">
+            <div class="panel">
+                <h2 class="text-lg font-bold mb-4 text-[#79c0ff]">プレビュー</h2>
+                <div class="w-full aspect-video bg-black rounded-lg overflow-hidden border border-[#30363d] relative">
+                    <video id="videoPlayer" class="w-full h-full object-contain"></video>
+                    <canvas id="exportCanvas" class="hidden"></canvas>
+                </div>
+                
+                <div class="flex gap-2 mt-4">
+                    <button id="previewBtn" class="flex-1 bg-[#21262d] border border-[#30363d] hover:bg-[#30363d] py-2 rounded text-sm disabled:opacity-50" disabled>
+                        ▶ カット後の状態を確認再生
+                    </button>
+                </div>
+            </div>
 
-$('audioFile').addEventListener('change', e=>{
- const f=e.target.files[0];if(!f)return;
- if(audioUrl)URL.revokeObjectURL(audioUrl);
- audioUrl=URL.createObjectURL(f);
- $('audio').src=audioUrl;
- $('audio').style.display='block';
- $('audio').load();
- mediaSourceNode = null;
- say(`音声を読み込みました: ${f.name}`);
-});
+            <div class="panel">
+                <h2 class="text-lg font-bold mb-2 text-[#79c0ff]">解析結果</h2>
+                <div class="flex justify-between text-sm mb-2 pb-2 border-b border-[#30363d]">
+                    <span>元の長さ: <span id="originalTime">0.0</span>s</span>
+                    <span>▶</span>
+                    <span class="text-[#79c0ff] font-bold">カット後: <span id="newTime">0.0</span>s</span>
+                </div>
+                <div id="segmentsList" class="max-h-40 overflow-y-auto text-xs space-y-1 font-mono text-gray-400">
+                    ※ここに残す部分（有音）のリストが表示されます。
+                </div>
+            </div>
+        </div>
+    </div>
 
-$('audio').onloadedmetadata = () => {
- generateBlinkSchedule();
-};
+<script type="module">
+    import { Muxer, ArrayBufferTarget } from 'https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.3/+esm';
 
-function setCanvasSize(){let w=+$('width').value,ratio=$('ratio').value,h=ratio==='16:9'?Math.round(w*9/16):ratio==='9:16'?Math.round(w*16/9):w;if(ratio==='9:16'&&w===1920)w=1080;canvas.width=w;canvas.height=h;drawAt(0)}
-$('width').addEventListener('change',setCanvasSize);$('ratio').addEventListener('change',setCanvasSize);
+    const el = {
+        input: document.getElementById('mediaInput'),
+        threshold: document.getElementById('threshold'),
+        thresholdVal: document.getElementById('thresholdVal'),
+        minSilence: document.getElementById('minSilence'),
+        padding: document.getElementById('padding'),
+        analyzeBtn: document.getElementById('analyzeBtn'),
+        exportFps: document.getElementById('exportFps'),
+        exportBtn: document.getElementById('exportBtn'),
+        exportProgressWrap: document.getElementById('exportProgressWrap'),
+        exportProgressBar: document.getElementById('exportProgressBar'),
+        exportProgressText: document.getElementById('exportProgressText'),
+        previewBtn: document.getElementById('previewBtn'),
+        video: document.getElementById('videoPlayer'),
+        canvas: document.getElementById('exportCanvas'),
+        status: document.getElementById('statusMsg'),
+        origTime: document.getElementById('originalTime'),
+        newTime: document.getElementById('newTime'),
+        segList: document.getElementById('segmentsList')
+    };
 
-function updateBgModeStyle(){
-  const s=$('bgMode');
-  if(s.value==='transparent'){
-    s.style.color='#000';
-    s.style.backgroundColor='#fff';
-    $('pillLabel').textContent = '背景透過キャンバス';
-  }else{
-    s.style.color='var(--text)';
-    s.style.backgroundColor='#101421';
-    $('pillLabel').textContent = s.options[s.selectedIndex].text;
-  }
-}
-$('bgMode').addEventListener('change',()=>{updateBgModeStyle();drawAt(getCurrentTime());});
-updateBgModeStyle();
+    let keepSegments = [];
+    let audioBuffer = null;
+    let isPreviewing = false;
+    let isExporting = false;
+    let mediaUrl = null;
 
-function getCurrentTime(){
- if($('audio').src && !$('audio').paused){
-  return $('audio').currentTime;
- }
- if(playing && !$('audio').src){
-  return (performance.now() - noAudioStartTime) / 1000;
- }
- return 0;
-}
+    el.threshold.addEventListener('input', (e) => { el.thresholdVal.innerText = e.target.value + 'dB'; });
 
-function isSpeakingAt(t){
- const a = $('audio');
- if(!a.src) return false;
- const dur = a.duration || 0;
- const data = window.audioEnergy || [];
- if(!dur || !data.length) return false;
- const idx = Math.min(data.length - 1, Math.floor(t / dur * data.length));
- return data[idx] > .018;
-}
+    el.input.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if(!file) return;
+        if(mediaUrl) URL.revokeObjectURL(mediaUrl);
+        mediaUrl = URL.createObjectURL(file);
+        el.video.src = mediaUrl;
+        
+        el.video.onloadedmetadata = () => {
+            el.origTime.innerText = el.video.duration.toFixed(1);
+            // H.264は幅・高さが偶数である必要があるため偶数丸め
+            el.canvas.width = el.video.videoWidth % 2 === 0 ? el.video.videoWidth : el.video.videoWidth - 1;
+            el.canvas.height = el.video.videoHeight % 2 === 0 ? el.video.videoHeight : el.video.videoHeight - 1;
+        };
 
-function isBlinkingAt(t){
- if(!imgs.eyesClosed) return false;
- const blinkDuration = 0.15; // 瞬きの持続時間 0.1秒
- return blinkTimes.some(bt => t >= bt && t < bt + blinkDuration);
-}
+        el.status.classList.remove('hidden');
+        el.status.innerText = "⏳ 音声データを準備中...";
+        el.analyzeBtn.disabled = true;
 
-function imageFor(t){
- const a = $('audio');
- const halfT = Math.max(0, +$('halfTime').value || .1);
- const speaking = isSpeakingAt(t);
+        const arrayBuffer = await file.arrayBuffer();
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+        await ctx.close();
+        
+        el.status.innerText = "✅ 準備完了！解析できます。";
+        el.analyzeBtn.disabled = false;
+    });
 
- if(!speaking && isBlinkingAt(t)){
-  return imgs.eyesClosed;
- }
+    el.analyzeBtn.addEventListener('click', () => {
+        if(!audioBuffer) return;
+        el.status.innerText = "✨ 解析中...";
+        
+        const data = audioBuffer.getChannelData(0);
+        const sampleRate = audioBuffer.sampleRate;
+        const dbThreshold = parseFloat(el.threshold.value);
+        const ampThreshold = Math.pow(10, dbThreshold / 20);
+        const minSilenceFrames = parseFloat(el.minSilence.value) * sampleRate;
+        const padFrames = parseFloat(el.padding.value) * sampleRate;
+        
+        const chunkSize = Math.floor(sampleRate * 0.05);
+        let silentRegions = [];
+        let isSilent = false;
+        let silentStart = 0;
 
- if(!imgs.open) return imgs.closed;
- if(!imgs.closed) return imgs.open;
- const data = window.audioEnergy || [];
- const dur = a.duration || 0;
- if(!a.src || !dur || !data.length) return imgs.closed;
- 
- const idx = Math.min(data.length - 1, Math.floor(t / dur * data.length));
- if(speaking){
-  let onset = idx; while(onset > 0 && data[onset-1] > .018) onset--;
-  const onsetTime = onset / data.length * dur;
-  if(imgs.half && t - onsetTime < halfT) return imgs.half;
-  return imgs.open;
- }
- return imgs.closed;
-}
+        for(let i=0; i<data.length; i+=chunkSize) {
+            let sum = 0;
+            for(let j=0; j<chunkSize && i+j<data.length; j++) { sum += data[i+j] * data[i+j]; }
+            let rms = Math.sqrt(sum / chunkSize);
+            let silentNow = rms < ampThreshold;
 
-function drawAt(t){
- ctx.clearRect(0, 0, canvas.width, canvas.height);
- const bg = $('bgMode')?.value || 'transparent';
- if(bg === 'green'){ ctx.fillStyle = '#00FF00'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
- else if(bg === 'red'){ ctx.fillStyle = '#FF0000'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
- else if(bg === 'blue'){ ctx.fillStyle = '#0000FF'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
- 
- const im = imageFor(t);
- if(!im){
-  ctx.fillStyle = '#9ba4c4'; ctx.textAlign = 'center'; ctx.font = '22px system-ui';
-  ctx.fillText('立ち絵を読み込むとここに表示されます', canvas.width/2, canvas.height/2);
-  return;
- }
- const scale = Math.min(canvas.width / im.width, canvas.height / im.height);
- const w = im.width * scale, h = im.height * scale;
- ctx.drawImage(im, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
+            if(!isSilent && silentNow) {
+                isSilent = true; silentStart = i;
+            } else if(isSilent && !silentNow) {
+                isSilent = false;
+                if(i - silentStart >= minSilenceFrames) {
+                    silentRegions.push({start: silentStart, end: i});
+                }
+            }
+        }
+        if(isSilent && data.length - silentStart >= minSilenceFrames) silentRegions.push({start: silentStart, end: data.length});
 
- const stateText = im===imgs.eyesClosed?'瞬き':im===imgs.open?'口開き':im===imgs.half?'半開き':'口閉じ';
- $('details').textContent = `${playing?'再生中':'待機中'} · ${t.toFixed(2)} 秒 · ${stateText}`;
-}
+        keepSegments = [];
+        let currentStart = 0;
+        for(let reg of silentRegions) {
+            let keepStart = Math.max(0, currentStart - padFrames);
+            let keepEnd = Math.min(data.length, reg.start + padFrames);
+            if(keepEnd > keepStart) keepSegments.push({start: keepStart/sampleRate, end: keepEnd/sampleRate});
+            currentStart = reg.end;
+        }
+        let finalStart = Math.max(0, currentStart - padFrames);
+        if(finalStart < data.length) keepSegments.push({start: finalStart/sampleRate, end: audioBuffer.duration});
 
-async function analyseAudio(){
- const file = $('audioFile').files[0];
- if(!file) return;
- const ac = new (window.AudioContext || window.webkitAudioContext)();
- const buf = await ac.decodeAudioData(await file.arrayBuffer());
- const ch = buf.getChannelData(0), step = Math.max(1, Math.floor(buf.sampleRate * .025));
- const arr = [];
- for(let i = 0; i < ch.length; i += step){
-  let sum = 0, n = Math.min(step, ch.length - i);
-  for(let j = 0; j < n; j++) sum += ch[i+j] * ch[i+j];
-  arr.push(Math.sqrt(sum / n));
- }
- const max = Math.max(...arr, 0.0001);
- window.audioEnergy = arr.map(v => v / max);
- await ac.close();
-}
+        let totalNewTime = 0;
+        el.segList.innerHTML = '';
+        keepSegments.forEach((seg, i) => {
+            totalNewTime += (seg.end - seg.start);
+            el.segList.innerHTML += `<div>[${i+1}] ${seg.start.toFixed(2)}s 〜 ${seg.end.toFixed(2)}s</div>`;
+        });
+        
+        el.newTime.innerText = totalNewTime.toFixed(1);
+        el.status.innerText = "✅ 解析完了！";
+        el.previewBtn.disabled = false;
+        el.exportBtn.disabled = false;
+    });
 
-function loop(){
- if(!playing) return;
- const t = getCurrentTime();
- drawAt(t);
- raf = requestAnimationFrame(loop);
-}
+    let currentSegIndex = 0;
+    el.video.addEventListener('timeupdate', () => {
+        if(isPreviewing && keepSegments.length > 0) {
+            let seg = keepSegments[currentSegIndex];
+            if(!seg || el.video.currentTime >= seg.end) {
+                currentSegIndex++;
+                if(currentSegIndex < keepSegments.length) {
+                    el.video.currentTime = keepSegments[currentSegIndex].start;
+                } else {
+                    el.video.pause();
+                    isPreviewing = false;
+                    el.previewBtn.innerText = "▶ カット後の状態を確認再生";
+                }
+            }
+        }
+    });
 
-$('previewBtn').onclick = async () => {
- if(!imgs.closed && !imgs.open){ say('先に立ち絵を読み込んでください'); return; }
- 
- generateBlinkSchedule();
- playing = true;
- cancelAnimationFrame(raf);
+    el.previewBtn.addEventListener('click', () => {
+        if(keepSegments.length === 0) return;
+        if(isPreviewing) {
+            el.video.pause(); isPreviewing = false; el.previewBtn.innerText = "▶ カット後の状態を確認再生";
+        } else {
+            isPreviewing = true;
+            currentSegIndex = 0;
+            el.video.currentTime = keepSegments[0].start;
+            el.video.play();
+            el.previewBtn.innerText = "⏸ プレビュー停止";
+        }
+    });
 
- if($('audio').src){
-  try{
-   await analyseAudio();
-   $('audio').currentTime = 0;
-   await $('audio').play();
-   loop();
-   $('audio').onended = () => {
-    playing = false;
-    drawAt(0);
-    cancelAnimationFrame(raf);
-   };
-  }catch(e){
-   say('再生できませんでした: ' + e.message);
-  }
- } else {
-  noAudioStartTime = performance.now();
-  loop();
-  say('音声なしプレビュー再生中（停止ボタンで終了）');
- }
-};
+    function seekVideoExact(video, time) {
+        return new Promise((resolve) => {
+            if (Math.abs(video.currentTime - time) < 0.001) {
+                resolve();
+                return;
+            }
+            const onSeeked = () => {
+                video.removeEventListener('seeked', onSeeked);
+                resolve();
+            };
+            video.addEventListener('seeked', onSeeked);
+            video.currentTime = time;
+        });
+    }
 
-$('stopBtn').onclick = () => {
- playing = false;
- if($('audio').src){
-  $('audio').pause();
- }
- cancelAnimationFrame(raf);
- drawAt(0);
- say('停止しました');
-};
+    // ⚡ WebCodecs + mp4-muxer による非リアルタイム爆速書き出し
+    el.exportBtn.addEventListener('click', async () => {
+        if(keepSegments.length === 0 || isExporting) return;
+        if(!window.VideoEncoder || !window.AudioEncoder) {
+            alert('このブラウザはWebCodecsに非対応です（最新のChrome / Edgeをご利用ください）');
+            return;
+        }
 
-function chooseMime(){
-  const transparent = $('bgMode').value === 'transparent';
-  const opts = transparent
-    ? ['video/webm;codecs=vp9','video/webm;codecs=vp9,opus','video/webm']
-    : ['video/mp4;codecs=h264,aac','video/mp4','video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm'];
-  return opts.find(x => window.MediaRecorder && MediaRecorder.isTypeSupported(x)) || '';
-}
+        isExporting = true;
+        isPreviewing = false;
+        el.video.pause();
+        el.exportBtn.disabled = true;
+        el.exportBtn.innerText = "⚡ WebCodecs 爆速エンコード中...";
+        el.exportProgressWrap.classList.remove('hidden');
 
-$('exportBtn').onclick = async () => {
- if(exporting) return;
- if(!imgs.closed && !imgs.open){ say('先に立ち絵を読み込んでください'); return; }
- if(!$('audio').src){ say('書き出しにはゆっくり音声ファイルが必要です。音声読み込みを行ってください。'); return; }
- if(!window.MediaRecorder || !canvas.captureStream){ say('このブラウザは動画書き出しに対応していません'); return; }
+        try {
+            const fps = parseInt(el.exportFps.value, 10) || 30;
+            const width = el.canvas.width;
+            const height = el.canvas.height;
+            const sampleRate = audioBuffer.sampleRate;
+            const numChannels = Math.min(2, audioBuffer.numberOfChannels);
+            const ctx = el.canvas.getContext('2d', { alpha: false });
 
- exporting = true;
- $('exportBtn').disabled = true;
+            const muxer = new Muxer({
+                target: new ArrayBufferTarget(),
+                video: { codec: 'avc', width, height },
+                audio: { codec: 'aac', numberOfChannels: numChannels, sampleRate },
+                fastStart: 'in-memory'
+            });
 
- try{
-  await analyseAudio();
-  generateBlinkSchedule();
-  
-  const a = $('audio');
-  a.pause();
-  a.currentTime = 0;
-  playing = true;
-  drawAt(0);
+            const videoEncoder = new VideoEncoder({
+                output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+                error: (e) => console.error('VideoEncoder error:', e)
+            });
 
-  const fps = +$('fps').value;
-  const stream = canvas.captureStream(fps);
+            videoEncoder.configure({
+                codec: 'avc1.640028',
+                width,
+                height,
+                bitrate: 5_000_000,
+                framerate: fps
+            });
 
-  try{
-   if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-   if(audioCtx.state === 'suspended') await audioCtx.resume();
-   
-   if(!mediaSourceNode){
-    mediaSourceNode = audioCtx.createMediaElementSource(a);
-   }
-   const dest = audioCtx.createMediaStreamDestination();
-   mediaSourceNode.disconnect();
-   mediaSourceNode.connect(dest);
-   mediaSourceNode.connect(audioCtx.destination);
-   
-   dest.stream.getAudioTracks().forEach(tr => stream.addTrack(tr));
-  }catch(e){
-   console.warn('audio stream capture fallback', e);
-  }
+            const audioEncoder = new AudioEncoder({
+                output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
+                error: (e) => console.error('AudioEncoder error:', e)
+            });
 
-  const mime = chooseMime();
-  const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
-  const chunks = [];
+            audioEncoder.configure({
+                codec: 'mp4a.40.2',
+                numberOfChannels: numChannels,
+                sampleRate,
+                bitrate: 128_000
+            });
 
-  rec.ondataavailable = e => { if(e.data && e.data.size) chunks.push(e.data); };
-  rec.onerror = e => say('書き出しエラー: ' + (e.error?.message || '不明なエラー'));
+            // 1. 残す区間の音声サンプルを結合して一括エンコード
+            const ch0 = audioBuffer.getChannelData(0);
+            const ch1 = numChannels > 1 ? audioBuffer.getChannelData(1) : ch0;
+            let totalAudioSamples = 0;
+            const ranges = keepSegments.map(seg => {
+                const s = Math.max(0, Math.floor(seg.start * sampleRate));
+                const e = Math.min(ch0.length, Math.floor(seg.end * sampleRate));
+                totalAudioSamples += Math.max(0, e - s);
+                return { s, e };
+            });
 
-  rec.onstop = () => {
-   playing = false;
-   cancelAnimationFrame(raf);
-   const type = rec.mimeType || 'video/webm';
-   const ext = type.includes('mp4') ? 'mp4' : 'webm';
-   const blob = new Blob(chunks, { type });
-   const url = URL.createObjectURL(blob);
-   const link = document.createElement('a');
-   link.href = url;
-   link.download = 'clipforge-lipsync.' + ext;
-   document.body.appendChild(link);
-   link.click();
-   link.remove();
-   setTimeout(() => URL.revokeObjectURL(url), 60000);
-   stream.getTracks().forEach(t => t.stop());
-   drawAt(0);
-   say(`書き出し完了！ ${ext.toUpperCase()} / ${(blob.size/1024/1024).toFixed(1)} MB`);
-   exporting = false;
-   $('exportBtn').disabled = false;
-  };
+            const mergedPlanar = new Float32Array(totalAudioSamples * numChannels);
+            let writeOffset = 0;
+            for (const r of ranges) {
+                const len = r.e - r.s;
+                if (len <= 0) continue;
+                mergedPlanar.set(ch0.subarray(r.s, r.e), writeOffset);
+                if (numChannels > 1) {
+                    mergedPlanar.set(ch1.subarray(r.s, r.e), totalAudioSamples + writeOffset);
+                }
+                writeOffset += len;
+            }
 
-  a.onended = () => {
-   setTimeout(() => {
-    if(rec.state !== 'inactive') rec.stop();
-   }, 300);
-  };
+            const audioChunkSamples = sampleRate; // 1秒ずつエンコード
+            for (let offset = 0; offset < totalAudioSamples; offset += audioChunkSamples) {
+                const frames = Math.min(audioChunkSamples, totalAudioSamples - offset);
+                const chunkBuf = new Float32Array(frames * numChannels);
+                chunkBuf.set(mergedPlanar.subarray(offset, offset + frames), 0);
+                if (numChannels > 1) {
+                    chunkBuf.set(mergedPlanar.subarray(totalAudioSamples + offset, totalAudioSamples + offset + frames), frames);
+                }
+                const audioData = new AudioData({
+                    format: 'f32-planar',
+                    sampleRate,
+                    numberOfFrames: frames,
+                    numberOfChannels: numChannels,
+                    timestamp: Math.round((offset / sampleRate) * 1_000_000),
+                    data: chunkBuf
+                });
+                audioEncoder.encode(audioData);
+                audioData.close();
+            }
 
-  rec.start(250);
-  await a.play();
-  loop();
-  say('書き出し中… 音声の再生が終わるまでこのタブを開いたままにしてください。');
+            // 2. 残す区間の映像フレームを高速シークで順番にエンコード
+            const totalDuration = keepSegments.reduce((acc, s) => acc + (s.end - s.start), 0);
+            const totalFrames = Math.max(1, Math.ceil(totalDuration * fps));
+            const frameDurationUs = Math.round(1_000_000 / fps);
 
- }catch(e){
-  playing = false;
-  exporting = false;
-  $('exportBtn').disabled = false;
-  say('書き出しに失敗しました: ' + e.message);
- }
-};
+            let outFrameIndex = 0;
+            const tStart = performance.now();
 
-drawAt(0);
+            for (const seg of keepSegments) {
+                const segDur = seg.end - seg.start;
+                const segFrames = Math.max(1, Math.round(segDur * fps));
+                for (let f = 0; f < segFrames; f++) {
+                    const srcTime = Math.min(seg.end, seg.start + (f / fps));
+                    await seekVideoExact(el.video, srcTime);
+                    ctx.drawImage(el.video, 0, 0, width, height);
+
+                    const timestampUs = outFrameIndex * frameDurationUs;
+                    const frame = new VideoFrame(el.canvas, {
+                        timestamp: timestampUs,
+                        duration: frameDurationUs
+                    });
+                    videoEncoder.encode(frame, { keyFrame: outFrameIndex % (fps * 2) === 0 });
+                    frame.close();
+
+                    outFrameIndex++;
+                    if (outFrameIndex % 10 === 0) {
+                        const pct = Math.min(99, Math.round((outFrameIndex / totalFrames) * 100));
+                        el.exportProgressBar.style.width = `${pct}%`;
+                        el.exportProgressText.innerText = `${pct}% (${outFrameIndex} / ${totalFrames} frames)`;
+                        if (videoEncoder.encodeQueueSize > 15) {
+                            await videoEncoder.flush();
+                        }
+                    }
+                }
+            }
+
+            await videoEncoder.flush();
+            await audioEncoder.flush();
+            videoEncoder.close();
+            audioEncoder.close();
+            muxer.finalize();
+
+            const { buffer } = muxer.target;
+            const blob = new Blob([buffer], { type: 'video/mp4' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `clipcutter_turbo.mp4`;
+            a.click();
+
+            const elapsed = ((performance.now() - tStart) / 1000).toFixed(1);
+            el.exportProgressBar.style.width = '100%';
+            el.exportProgressText.innerText = `✅ 完了！ (${elapsed}秒で爆速書き出し成功)`;
+        } catch (err) {
+            alert('書き出しエラー: ' + err.message);
+        } finally {
+            isExporting = false;
+            el.exportBtn.disabled = false;
+            el.exportBtn.innerText = "⚡ WebCodecsで爆速MP4書き出し";
+        }
+    });
 </script>
 </body>
 </html>
